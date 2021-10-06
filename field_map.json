@@ -1,0 +1,9 @@
+{
+    "AB": { "name": "Abstract", "csl": "abstract" },
+    "PMID": { "name": "Pubmed ID", "csl": "note" },
+    "TI": { "name": "Title", "csl": "title" },
+    "VI": { "name": "Volume", "csl": "volume" },
+    "IP": { "name": "Issue", "csl": "issue" },
+    "PG": { "name": "Pagination", "csl": "page" },
+    "DP": { "name": "Date of Publication", "csl": "issued" }
+}

@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/nbib
+nbib.so
+nbib.dylib
+nbib.dll
+nbib.a
+nbib.lib
+nbib-test-*
+*.exe
+*.o
+*.obj
+*.lst

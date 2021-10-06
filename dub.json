@@ -1,0 +1,13 @@
+{
+	"authors": [
+		"James S. Blachly",
+		"MD"
+	],
+	"copyright": "Copyright © 2021, James S. Blachly, MD",
+	"dependencies": {
+		"asdf": "~>0.7.12"
+	},
+	"description": "MEDLINE/Pubmed nbib to CSL-JSON",
+	"license": "MIT",
+	"name": "nbib"
+}
