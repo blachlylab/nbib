@@ -9,6 +9,62 @@ import std.range.primitives : empty;
 import mir.algebraic;
 import asdf;
 
+/// CSL item record
+///
+/// Serialization to JSON is implemented manually to keep tag: value at top level (non-nested)
+///
+/// TODO: Inject "id" field since we don't get one from MEDLINE/Pubmed format, and is required
+///
+/// Reference: https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html
+/// Reference: https://github.com/citation-style-language/schema/blob/master/schemas/input/csl-data.json
+struct CSLItem
+{
+    CSLOrdinaryField[] fields;
+    CSLNameField[] names;
+    CSLDateField[] dates;
+
+    // Custom serialization needed to flatten structure
+    void serialize(S)(ref S serializer) const
+    {
+        auto o = serializer.structBegin();
+
+            // Ordinary fields
+            foreach(f; this.fields) {
+                serializer.putKey(f.key);
+                serializer.putValue(f.value);
+            }
+
+            // names
+            serializer.putKey("author");
+            auto state1 = serializer.arrayBegin();
+                foreach(n; this.names) {
+                    serializer.elemBegin();
+                    serializer.serializeValue(n.np);
+                }
+            serializer.arrayEnd(state1);
+
+        serializer.structEnd(o);
+    }
+
+    string toString() const
+    {
+        return serializeToJson(this);
+    }
+}
+unittest
+{
+    CSLItem item;
+    item.fields = [ CSLOrdinaryField("key1", "value1"),
+                    CSLOrdinaryField("key2", "value2") ];
+    item.names = [ CSLNameField("author", "Blachly, James S"),
+                    CSLNameField("author", "Byrd, John C")];
+    writeln(item.serializeToJsonPretty);
+
+    assert(item.serializeToJson == `{"key1":"value1","key2":"value2","author":[{"family":"Blachly","given":"James S"},{"family":"Byrd","given":"John C"}]}`);
+
+
+}
+
 struct CSLOrdinaryField
 {
     string key;
