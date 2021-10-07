@@ -13,6 +13,19 @@ struct CSLOrdinaryField
 {
     string key;
     string value;
+
+    void serialize(S)(ref S serializer) const
+    {
+        auto o = serializer.structBegin();
+        serializer.putKey(this.key);
+        serializer.putValue(value);
+        serializer.structEnd(o);
+    }
+
+    string toString() const
+    {
+        return serializeToJson(this);
+    }
 }
 
 /// Definition:
@@ -20,6 +33,10 @@ struct CSLOrdinaryField
 struct CSLNameField
 {
     string key;
+    
+    // "Full" author, editor, etc. name; in MEDLINE/Pubmed format
+    // corresponds to "FAU" or "FED"
+    bool full;
 
     struct NameParts {
         @serdeIgnoreOutIf!empty
@@ -56,14 +73,38 @@ struct CSLNameField
     }
     NameParts np;
 
-    this(string family)
+    this(string nametype, string name)
     {
-        this.np.family = family;
+        this.key = nametype;
+
+        // TODO: this could be made more sophiticated by detecting
+        // dropping participles like Dr. and Rev., etc., and suffixes like Jr., PhD., etc.
+        // which I would do with a separate function.
+        auto name_parts = name.split(",");
+        if (name_parts.length == 1)
+            this.np.family = name.strip;
+        else if (name_parts.length == 2) {
+            this.full = true;
+            this.np.family = name_parts[0].strip;
+            this.np.given = name_parts[1].strip;
+        }
+        else {
+            stderr.writefln("Too many name parts: %s", name);
+            this.np.family = name.strip;
+        }   
     }
-    this(string family, string given)
+    
+    void serialize(S)(ref S serializer) const
     {
-        this.np.family = family;
-        this.np.given = given;
+        auto o = serializer.structBegin();
+        serializer.putKey(this.key);
+        serializer.serializeValue(this.np);
+        serializer.structEnd(o);
+    }
+
+    string toString() const
+    {
+        return serializeToJson(this);
     }
 }
 
@@ -134,30 +175,28 @@ CSLValue processTag(string tag, string value)
     }
     else if (tag == "DP") {
         stderr.writeln("Date of Publication (DP)");
-        // return CSL "issued"
-        // need to transform to ISO 8601 per CSL specs;
+        // TODO need to transform to ISO 8601 per CSL specs;
         // medline looks like YYYY Mon DD
         return CSLValue(CSLDateField(value));
     }
     else if (tag == "FAU") {
         stderr.writeln("Full Author (FAU)");
-        // return CSL author: { ... } via some other transformer
-        // TODO split name
-        return CSLValue(CSLNameField(value));
+        return CSLValue(CSLNameField("author", value));
     }
     else if (tag == "AU") {
         stderr.writeln("Author (AU)");
-        // return CSL author: { ... } via some other transformer
-        // TODO split name
-        return CSLValue(CSLNameField(value));
+        return CSLValue(CSLNameField("author", value));
     }
+
+    // FED, ED (editor; logic same as author)
+
     // Affilitation (AD)
     else if (tag == "AUID") {
         stderr.writeln("Author Identifier (AUID)");
         // This would typically be an ORCID
         // CSL name-variable definition does not have designated place for author id
         // https://github.com/citation-style-language/schema/blob/c2142118a0265dfcf7d66aa3328251bedcc66af2/schemas/input/csl-data.json#L463-L498
-        return CSLValue(CSLOrdinaryField("note", format("ORCID: %s", value)));
+        return CSLValue(CSLOrdinaryField("note", value));
     }
 
     else if (tag == "LA") {
@@ -206,13 +245,11 @@ CSLValue processTag(string tag, string value)
     
     else if (tag == "TA") {
         stderr.writeln("Title Abbreviation (TA)");
-        // return CSL "container-title-short"
         return CSLValue(CSLOrdinaryField("container-title-short", value));
     }
     else if (tag == "JT") {
         stderr.writeln("Journal Title (JT)");
-        // return CSL "container-title"
-        return CSLValue(CSLOrdinaryField("container-title"));
+        return CSLValue(CSLOrdinaryField("container-title", value));
     }
     // NLM Unique ID (JID)
     // Registry Number/EC Number (RN)
@@ -220,7 +257,6 @@ CSLValue processTag(string tag, string value)
 
     else if (tag == "MH" || tag == "OT") {
         stderr.writeln("MeSH Terms or Other Term (OT)");
-        // emit CSL "note"=
         return CSLValue(CSLOrdinaryField("note", value));
     }
 
@@ -296,14 +332,18 @@ auto mergeMultiLineItems(R)(R range)
     return ret;
 }
 
+/// Convert medline record (group of tags) to CSL-JSON item tags
 /// TODO make lazy
 auto medlineToCSL(R)(R range)
 {
     CSLValue[] ret;
 
     foreach(row; range) {
+        // Format: "XXXX- The quick brown fox jumped..."
+        // where XXXX of length 1-4 and right-padded
         assert(row.length >= 7, "Malformed record");
         assert(row[4] == '-', "Malformed record");
+
         auto key = row[0 .. 4].stripRight;
         auto value = row[6 .. $];
 
@@ -328,6 +368,33 @@ void main()
                         .map!mergeMultiLineItems
                         .map!medlineToCSL;
 
-    writeln(records);
+    foreach (rec; records) {
+        import std.algorithm : count, filter;
+        // Count full authors
+        auto nFAU = rec.filter!(
+            v => v.visit!(
+                (CSLOrdinaryField x) => false,
+                (CSLNameField x) => x.full,
+                (CSLDateField x) => false
+            )).count;
+        // Count old-style authors
+        auto nAU = rec.filter!(
+            v => v.visit!(
+                (CSLOrdinaryField x) => false,
+                (CSLNameField x) => !x.full,
+                (CSLDateField x) => false
+            )).count;
+        writefln("Full authors: %d", nFAU);
+        writefln("Old-style authors: %d", nAU);
+        // remove non-full authors
+        if (nFAU >= nAU)
+            rec = rec.filter!(
+                v => v.visit!(
+                    (CSLOrdinaryField x) => true,
+                    (CSLNameField x) => x.full,
+                    (CSLDateField x) => true
+                )).array;
 
+        writeln(rec.serializeToJsonPretty);
+    }
 }
