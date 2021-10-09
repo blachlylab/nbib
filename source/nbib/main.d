@@ -28,6 +28,22 @@ void main()
                         .map!medlineToCSL;
 
     foreach (rec; records) {
+        import std.algorithm : count, each, filter;
+
+        CSLItem item;
+
+        rec.each!(v => v.visit!(
+            (CSLOrdinaryField x) => item.fields ~= x,
+            (CSLNameField x) => item.names ~= x,
+            (CSLDateField x) => item.dates ~= x
+        ));
+
+        writeln("Record:");
+        writeln(item);
+    }
+
+/+
+    foreach (rec; records) {
         import std.algorithm : count, filter;
         // Count full authors
         auto nFAU = rec.filter!(
@@ -56,4 +72,5 @@ void main()
 
         writeln(rec.serializeToJsonPretty);
     }
++/
 }

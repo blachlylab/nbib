@@ -75,6 +75,9 @@ struct CSLItem
             }
 
             // dates (TODO)
+            foreach(d; this.dates) {
+                serializer.serializeValue(d);
+            }
 
         serializer.structEnd(state0);
     }
@@ -245,7 +248,21 @@ struct CSLDateField
     }
     DateParts dp;
 
-    this(string raw) { this.dp.raw = raw; }
+    this(string key, string raw) { this.key = key; this.dp.raw = raw; }
+
+    void serialize(S)(ref S serializer) const
+    {
+        // Note that I purposefully OMIT structBegin/structEnd
+        // now, we can use this object's serialization from containing objects
+        // without creating an extra nsted layer, which has the effect of "flattening"
+        serializer.putKey(this.key);
+        serializer.serializeValue(this.dp);
+    }
+
+    string toString() const
+    {
+        return serializeToJson(this);
+    }
 }
 
     

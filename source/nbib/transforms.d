@@ -56,7 +56,7 @@ CSLValue processTag(string tag, string value)
         stderr.writeln("Date of Publication (DP)");
         // TODO need to transform to ISO 8601 per CSL specs;
         // medline looks like YYYY Mon DD
-        return CSLValue(CSLDateField(value));
+        return CSLValue(CSLDateField("issued", value));
     }
     else if (tag == "FAU") {
         stderr.writeln("Full Author (FAU)");
@@ -151,7 +151,7 @@ CSLValue processTag(string tag, string value)
         stderr.writeln("Article Identifier (AID)");
         // if DOI, return CSL "DOI" , and strip trailing "[doi]"
         if (value[$-5 .. $] == "[doi]")
-            return CSLValue(CSLOrdinaryField("DOI", value[0 .. $-5]));
+            return CSLValue(CSLOrdinaryField("DOI", value[0 .. $-6]));
         else {
             CSLValue ret;
             ret.nullify;
