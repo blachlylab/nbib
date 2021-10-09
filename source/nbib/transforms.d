@@ -23,55 +23,39 @@ CSLValue processTag(string tag, string value)
     assert(!tag.empty && tag.length <= 4, "MEDLINE/Pubmed nbib tags are 1-4 characters");
 
     if (tag == "AB") {
-        stderr.writeln("Abstract (AB)");
         return cast(CSLValue) CSLOrdinaryField("abstract", value);
     }
     else if (tag == "PMID") {
-        stderr.writeln("Pubmed ID (PMID)");
         return CSLValue(CSLOrdinaryField("note", format("PMID: %s", value)));
     }
     else if (tag == "PMC") {
-        stderr.writeln("PubMed Central Identifier (PMC)");
         return CSLValue(CSLOrdinaryField("note", format("PMCID: %s", value)));
     }
     // Manuscript Identifier (MID)
     
     else if (tag == "TI") {
-        stderr.writeln("Title (TI)");
         return CSLValue(CSLOrdinaryField("title", value));
     }
     else if (tag == "VI") {
-        stderr.writeln("Volume (VI)");
         return CSLValue(CSLOrdinaryField("volume", value));
     }
     else if (tag == "IP") {
-        stderr.writeln("Issue (IP)");
         return CSLValue(CSLOrdinaryField("issue", value));
     }
     else if (tag == "PG") {
-        stderr.writeln("Pagination (PG)");
         return CSLValue(CSLOrdinaryField("page", value));
     }
     else if (tag == "DP") {
-        stderr.writeln("Date of Publication (DP)");
         // TODO need to transform to ISO 8601 per CSL specs;
         // medline looks like YYYY Mon DD
         return CSLValue(CSLDateField("issued", value));
     }
-    else if (tag == "FAU") {
-        stderr.writeln("Full Author (FAU)");
-        return CSLValue(CSLNameField("author", value));
-    }
-    else if (tag == "AU") {
-        stderr.writeln("Author (AU)");
-        return CSLValue(CSLNameField("author", value));
-    }
+    else if (tag == "FAU") return CSLValue(CSLNameField("author", value));
+    else if (tag == "AU") return CSLValue(CSLNameField("author", value));
     else if (tag == "FED") return CSLValue(CSLNameField("editor", value));
     else if (tag == "ED") return CSLValue(CSLNameField("editor", value));
-
-    // Affilitation (AD)
+    
     else if (tag == "AUID") {
-        stderr.writeln("Author Identifier (AUID)");
         // This would typically be an ORCID
         // CSL name-variable definition does not have designated place for author id
         // https://github.com/citation-style-language/schema/blob/c2142118a0265dfcf7d66aa3328251bedcc66af2/schemas/input/csl-data.json#L463-L498
@@ -82,7 +66,6 @@ CSLValue processTag(string tag, string value)
     }
 
     else if (tag == "LA") {
-        stderr.writeln("Language (LA)");
         // return CSL "language"
         // TODO, MEDLINE/Pubmed uses 3 letter language code; does CSL specify 3 or 2 letter?a
         // https://www.nlm.nih.gov/bsd/language_table.html
@@ -90,7 +73,6 @@ CSLValue processTag(string tag, string value)
     }
 
     else if (tag == "SI") {
-        stderr.writeln("Secondary Source ID (SI)");
         // return CSL "note"
         return CSLValue(CSLOrdinaryField("note", value));
     }
@@ -98,7 +80,6 @@ CSLValue processTag(string tag, string value)
     // (GR) Grant Number
 
     else if (tag == "PT") {
-        stderr.writeln("Publication Type (PT)");
         // This field describes the type of material that the article represents;
         // it characterizes the nature of the information or the manner in which
         // it is conveyed (e.g., Review, Letter, Retracted Publication, Clinical Trial).
@@ -111,12 +92,10 @@ CSLValue processTag(string tag, string value)
         //
         // Reference: https://www.nlm.nih.gov/mesh/pubtypes.html
         if (value == "Journal Article") {
-            stderr.writeln("Journal Article");
             // return "type": "article-journal"
             // https://aurimasv.github.io/z2csl/typeMap.xml#map-journalArticle
             return CSLValue(CSLOrdinaryField("type", "article-journal"));
         } else {
-            stderr.writeln("Other publication type");
             // else throw(?) or return Option<None>
             CSLValue ret;
             ret.nullify;
@@ -124,31 +103,12 @@ CSLValue processTag(string tag, string value)
         }
     }
 
-    // Date of Electronic Publication 	(DEP)
-    
-    else if (tag == "TA") {
-        stderr.writeln("Title Abbreviation (TA)");
+    else if (tag == "TA")
         return CSLValue(CSLOrdinaryField("container-title-short", value));
-    }
-    else if (tag == "JT") {
-        stderr.writeln("Journal Title (JT)");
+    else if (tag == "JT")
         return CSLValue(CSLOrdinaryField("container-title", value));
-    }
-    // NLM Unique ID (JID)
-    // Registry Number/EC Number (RN)
-    // Comment in 	(CIN)
-
-    else if (tag == "MH" || tag == "OT") {
-        stderr.writeln("MeSH Terms or Other Term (OT)");
-        return CSLValue(CSLOrdinaryField("note", value));
-    }
-
-    // various status date fields (TODO?)
-
-    // Publication Status (PST)
-
+    
     else if (tag == "AID") {
-        stderr.writeln("Article Identifier (AID)");
         // if DOI, return CSL "DOI" , and strip trailing "[doi]"
         if (value[$-5 .. $] == "[doi]")
             return CSLValue(CSLOrdinaryField("DOI", value[0 .. $-6]));
@@ -160,7 +120,7 @@ CSLValue processTag(string tag, string value)
     }
 
     else {
-        stderr.writefln("Unprocessed tag: %s", tag);
+        //stderr.writefln("Unprocessed tag: %s", tag);
         CSLValue ret;
         ret.nullify;
         return ret;
