@@ -13,8 +13,15 @@ import asdf;
 
 import nbib.types;
 
+/// Convert a MEDLINE/Pubmed nbib (RIS-like) tag into corresponding CSL tag/value
+///
+/// The return type is a nullable algebreic type that supports ordinary types, name fields, and date fields
+/// Recognized but non-supported tags, and unrecognized tags both yield an empty result: CSLValue(null)
+/// On error, CSLValue(null) is also returned (TODO: consider expect package or similar)
 CSLValue processTag(string tag, string value)
 {
+    assert(!tag.empty && tag.length <= 4, "MEDLINE/Pubmed nbib tags are 1-4 characters");
+
     if (tag == "AB") {
         stderr.writeln("Abstract (AB)");
         return cast(CSLValue) CSLOrdinaryField("abstract", value);
@@ -59,8 +66,8 @@ CSLValue processTag(string tag, string value)
         stderr.writeln("Author (AU)");
         return CSLValue(CSLNameField("author", value));
     }
-
-    // FED, ED (editor; logic same as author)
+    else if (tag == "FED") return CSLValue(CSLNameField("editor", value));
+    else if (tag == "ED") return CSLValue(CSLNameField("editor", value));
 
     // Affilitation (AD)
     else if (tag == "AUID") {
@@ -68,7 +75,10 @@ CSLValue processTag(string tag, string value)
         // This would typically be an ORCID
         // CSL name-variable definition does not have designated place for author id
         // https://github.com/citation-style-language/schema/blob/c2142118a0265dfcf7d66aa3328251bedcc66af2/schemas/input/csl-data.json#L463-L498
-        return CSLValue(CSLOrdinaryField("note", value));
+        //
+        // Because this can appear in the middle of author lists, we will ignore it for now :/
+        //return CSLValue(CSLOrdinaryField("note", value));
+        return CSLValue(null);
     }
 
     else if (tag == "LA") {
@@ -106,6 +116,7 @@ CSLValue processTag(string tag, string value)
             // https://aurimasv.github.io/z2csl/typeMap.xml#map-journalArticle
             return CSLValue(CSLOrdinaryField("type", "article-journal"));
         } else {
+            stderr.writeln("Other publication type");
             // else throw(?) or return Option<None>
             CSLValue ret;
             ret.nullify;
@@ -132,7 +143,7 @@ CSLValue processTag(string tag, string value)
         return CSLValue(CSLOrdinaryField("note", value));
     }
 
-    // various status date fields
+    // various status date fields (TODO?)
 
     // Publication Status (PST)
 
@@ -156,6 +167,18 @@ CSLValue processTag(string tag, string value)
     }
 
     assert(0, "Tag matched without return");
+}
+unittest
+{
+    assert( processTag("XYZ", "val") == CSLValue(null) );
+
+    assert( processTag("AB", "This is the abstract") == CSLValue(CSLOrdinaryField("abstract", "This is the abstract")) );
+
+    assert( processTag("PMID", "12345") == CSLValue(CSLOrdinaryField("note", "PMID: 12345")) );
+
+    assert( processTag("FAU", "Blachly, James S") == CSLNameField("author", "Blachly, James S") );
+
+    // TODO test date field
 }
 
 /// Merge multi-line records from a range of strings
@@ -202,6 +225,23 @@ auto mergeMultiLineItems(R)(R range)
     else if (buf.length == 1) ret ~= buf[0];
     else ret ~= buf.joiner(" ").array.to!string;
     return ret;
+}
+unittest
+{
+    string[] rec = [
+        "PMID- 12345",
+        "XY  - Unused field",
+        "AB  - This is the abstract's first line",
+        "      and this is its second line;",
+        "      with conclusion.",
+        "FAU - Blachly, James S",
+        "FAU - Gregory, Charles Thomas"
+    ];
+
+    auto mergedRec = mergeMultiLineItems(rec);
+
+    assert(mergedRec.length == 5);
+    assert(mergedRec[2] == "AB  - This is the abstract's first line and this is its second line; with conclusion.");
 }
 
 /// Convert medline record (group of tags) to CSL-JSON item tags

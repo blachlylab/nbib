@@ -7,11 +7,17 @@ import std.range.primitives : empty;
 import mir.algebraic;
 import asdf;
 
+
 /// CSL item record
 ///
-/// Serialization to JSON is implemented manually to keep tag: value at top level (non-nested)
+/// Tags and values are stored in one of three arrays, according to whether they are ordinary, name, or date.
+/// Serialization to JSON is implemented manually to keep contained `tag: value` at top level (non-nested)
+/// A few transformations are made:
+///     (1) `id` is injected (and any existing id, which shouldn't happen, is ignored)
+///     (2) name field tags are aggregated and grouped by type (author, editor, etc.)
+///     (3) ???
 ///
-/// TODO: Inject "id" field since we don't get one from MEDLINE/Pubmed format, and is required
+/// The end result should be semantically-correct CSL-JSON
 ///
 /// Reference: https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html
 /// Reference: https://github.com/citation-style-language/schema/blob/master/schemas/input/csl-data.json
@@ -21,27 +27,56 @@ struct CSLItem
     CSLNameField[] names;
     CSLDateField[] dates;
 
-    // Custom serialization needed to flatten structure
+    /// Identify unique keys used in name field type records
+    private auto nameTypes() const
+    {
+        import std.algorithm.sorting : sort;
+        import std.algorithm.iteration : map, uniq;
+        // i hate that .dup is necessary but apparently the const (from struct) cascades
+        // and we end up with const(string[]), which can't be sorted mutably *eyeroll*
+        return this.names.map!(a => a.key).array.dup.sort.uniq;
+    }
+
+    /// Custom serialization
+    ///     - inject `id`
+    ///     - flatten ordinary fields
+    ///     - aggegate and group by name type
+    ///     - aggregate and group by date type (TODO: shouldn't be duplicates?)
     void serialize(S)(ref S serializer) const
     {
-        auto o = serializer.structBegin();
+        import std.algorithm : filter;
+        import std.format : format;
+
+        auto state0 = serializer.structBegin();
+
+            // Inject id, one of the only two required fields in CSL (other being `type`)
+            serializer.putKey("id");
+            serializer.putValue(format("nbib-%x", this.hashOf));
 
             // Ordinary fields
             foreach(f; this.fields) {
-                serializer.putKey(f.key);
-                serializer.putValue(f.value);
+                if (f.key == "id") continue;    // already injected id
+                //serializer.putKey(f.key);
+                //serializer.putValue(f.value);
+                serializer.serializeValue(f);   // OK if `f` doesn't emit structBegin/End
             }
 
             // names
-            serializer.putKey("author");
-            auto state1 = serializer.arrayBegin();
-                foreach(n; this.names) {
+            auto types = this.nameTypes;
+            foreach(t; types) {
+                serializer.putKey(t);   // e.g. "author"; "editor"
+                auto state1 = serializer.arrayBegin();
+                auto matchingNames = this.names.filter!(a => a.key == t);
+                foreach(n; matchingNames) {
                     serializer.elemBegin();
                     serializer.serializeValue(n.np);
                 }
-            serializer.arrayEnd(state1);
+                serializer.arrayEnd(state1);
+            }
 
-        serializer.structEnd(o);
+            // dates (TODO)
+
+        serializer.structEnd(state0);
     }
 
     string toString() const
@@ -55,14 +90,27 @@ unittest
     item.fields = [ CSLOrdinaryField("key1", "value1"),
                     CSLOrdinaryField("key2", "value2") ];
     item.names = [ CSLNameField("author", "Blachly, James S"),
+                    CSLNameField("editor", "Grever, Michael"),  // purposefully out of order
                     CSLNameField("author", "Byrd, John C")];
+    
     writeln(item.serializeToJsonPretty);
+    writeln(item.serializeToJson);
 
-    assert(item.serializeToJson == `{"key1":"value1","key2":"value2","author":[{"family":"Blachly","given":"James S"},{"family":"Byrd","given":"John C"}]}`);
+    writefln("hashOf: %x", item.hashOf);
 
+    assert(item.serializeToJson ==
+        `{"id":"nbib-c1ad8b2b8309f124","key1":"value1","key2":"value2","author":[{"family":"Blachly","given":"James S"},{"family":"Byrd","given":"John C"}],"editor":[{"family":"Grever","given":"Michael"}]}`);
 
 }
 
+/// CSL-JSON value
+///
+/// Specification defines them as ordinary fields, name fields, or date fields
+/// We additionally allow None/null as signal for our conversion program taht
+/// either something went wrong or that a tag was ignored in conversion
+alias CSLValue = Nullable!(CSLOrdinaryField, CSLNameField, CSLDateField);
+
+/// Ordinary field: key = value
 struct CSLOrdinaryField
 {
     string key;
@@ -70,16 +118,23 @@ struct CSLOrdinaryField
 
     void serialize(S)(ref S serializer) const
     {
-        auto o = serializer.structBegin();
+        // Note that I purposefully OMIT structBegin/structEnd
+        // now, we can use this object's serialization from containing objects
+        // without creating an extra nsted layer, which has the effect of "flattening"
         serializer.putKey(this.key);
         serializer.putValue(value);
-        serializer.structEnd(o);
     }
 
     string toString() const
     {
         return serializeToJson(this);
     }
+}
+unittest
+{
+    auto f = CSLOrdinaryField("xyzzy", "magic");
+    writefln("CSLOrdinaryField: %s", f);
+    assert( f.serializeToJson == `"xyzzy":"magic"` );
 }
 
 /// Definition:
@@ -193,5 +248,4 @@ struct CSLDateField
     this(string raw) { this.dp.raw = raw; }
 }
 
-alias CSLValue = Nullable!(CSLOrdinaryField, CSLNameField, CSLDateField);
     
