@@ -1,7 +1,6 @@
 {
 	"authors": [
-		"James S. Blachly",
-		"MD"
+		"James S. Blachly, MD"
 	],
 	"copyright": "Copyright © 2021, James S. Blachly, MD",
 	"dependencies": {
@@ -9,5 +8,20 @@
 	},
 	"description": "MEDLINE/Pubmed nbib to CSL-JSON",
 	"license": "MIT",
-	"name": "nbib"
+	"name": "nbib",
+    "configurations": [
+        {
+            "name": "cli",
+            "targetType": "executable",
+            "excludedSourceFiles": ["source/nbib/fastcgi.d"]
+        },
+        {
+            "name": "usvc",
+            "targetType": "executable",
+            "excludedSourceFiles": ["source/nbib/main.d"],
+            "dependencies": {
+                "arsd-official:cgi": "~>10.3.4"
+            }
+        }
+    ]
 }

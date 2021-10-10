@@ -1,6 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
+		"arsd-official": "10.3.4",
 		"asdf": "0.7.12",
 		"mir-algorithm": "3.10.91",
 		"mir-core": "1.1.83"

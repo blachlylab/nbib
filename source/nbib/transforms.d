@@ -227,3 +227,30 @@ auto medlineToCSL(R)(R range)
     return ret;
 }
 
+/// Convert range of records (where each record is a range of tags)
+/// to `asdf` (a binary JSON-like representation), which can then
+/// be serialized out to (non-pretty-printed) JSON
+auto toAsdf(R)(R records)
+{
+    import std.algorithm : count, each, filter;
+    
+    auto ser = asdfSerializer();
+    auto state0 = ser.listBegin();
+    foreach (rec; records) {
+        CSLItem item;
+
+        // Load the CSLItem by field type
+        rec.each!(v => v.visit!(
+            (CSLOrdinaryField x) => item.fields ~= x,
+            (CSLNameField x) => item.names ~= x,
+            (CSLDateField x) => item.dates ~= x
+        ));
+
+        ser.elemBegin;
+        ser.serializeValue(item);
+    }
+    ser.listEnd(state0);
+
+    return ser;
+}
+
