@@ -13,3 +13,6 @@ nbib-test-*
 *.o
 *.obj
 *.lst
+
+# data files
+*.nbib
