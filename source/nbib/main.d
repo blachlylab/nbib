@@ -25,52 +25,10 @@ void main()
                         .array
                         .splitter("")
                         .map!mergeMultiLineItems
-                        .map!medlineToCSL;
+                        .map!medlineToCSL
+                        .map!reduceAuthors;
 
-    foreach (rec; records) {
-        import std.algorithm : count, each, filter;
+    auto ser = records.toAsdf;
 
-        CSLItem item;
-
-        rec.each!(v => v.visit!(
-            (CSLOrdinaryField x) => item.fields ~= x,
-            (CSLNameField x) => item.names ~= x,
-            (CSLDateField x) => item.dates ~= x
-        ));
-
-        writeln("Record:");
-        writeln(item);
-    }
-
-/+
-    foreach (rec; records) {
-        import std.algorithm : count, filter;
-        // Count full authors
-        auto nFAU = rec.filter!(
-            v => v.visit!(
-                (CSLOrdinaryField x) => false,
-                (CSLNameField x) => x.full,
-                (CSLDateField x) => false
-            )).count;
-        // Count old-style authors
-        auto nAU = rec.filter!(
-            v => v.visit!(
-                (CSLOrdinaryField x) => false,
-                (CSLNameField x) => !x.full,
-                (CSLDateField x) => false
-            )).count;
-        writefln("Full authors: %d", nFAU);
-        writefln("Old-style authors: %d", nAU);
-        // remove non-full authors
-        if (nFAU >= nAU)
-            rec = rec.filter!(
-                v => v.visit!(
-                    (CSLOrdinaryField x) => true,
-                    (CSLNameField x) => x.full,
-                    (CSLDateField x) => true
-                )).array;
-
-        writeln(rec.serializeToJsonPretty);
-    }
-+/
+    writeln(ser.app.result.to!string);
 }

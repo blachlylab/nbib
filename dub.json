@@ -13,7 +13,8 @@
         {
             "name": "cli",
             "targetType": "executable",
-            "excludedSourceFiles": ["source/nbib/fastcgi.d"]
+            "excludedSourceFiles": ["source/nbib/fastcgi.d"],
+            "mainSourceFile": "source/nbib/main.d"
         },
         {
             "name": "usvc",

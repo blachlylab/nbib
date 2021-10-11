@@ -2,7 +2,8 @@ module nbib.transforms;
 
 import std.typecons : Tuple;
 import std.array;
-import std.algorithm : joiner, map, splitter, splitWhen, chunkBy, group;
+import std.algorithm : count, filter, joiner, map, cumulativeFold, fold, reduce, splitter, splitWhen, chunkBy, group;
+import std.range : isInputRange, takeNone, takeOne, chain;
 import std.conv;
 import std.string : strip, stripRight;
 import std.format : format;
@@ -150,6 +151,7 @@ unittest
 /// The complete range might look like:
 /// ["PMID- 12345", "TI  - Article title", "AB  - Abstr line 1", "      ...line2", "AU  - Blachly JS"]
 auto mergeMultiLineItems(R)(R range)
+    if (isInputRange!R)
 {
     string[] ret;
     string[] buf;   // temporary buffer
@@ -225,6 +227,149 @@ auto medlineToCSL(R)(R range)
     }
 
     return ret;
+}
+
+/// Merge author records when both FAU and AU appear for same author
+/// (or make best effort)
+/// 
+/// Takes a range of CSL tags/values (collectively, a complete record => rec)
+///
+/// TODO: support multiple types (author, editor)
+auto reduceAuthors(R)(R rec)
+    if (isInputRange!R)
+{
+    // Strategy 0: exploratory
+/+
+    auto names = rec.filter!(
+        v => v.visit!(
+            (CSLOrdinaryField x) => false,
+            (CSLNameField x) => true,
+            (CSLDateField x) => false
+        ));
+            
+    auto namesTypes = rec.filter!(
+        v => v.visit!(
+            (CSLOrdinaryField x) => false,
+            (CSLNameField x) => true,
+            (CSLDateField x) => false
+        ))
+        .map!(x => x.getMember!"key")    // not sure why this compiles since also Nullable?
+        .group;
++/              
+    auto namesGroupedByType = rec.filter!(
+        v => v.visit!(
+            (CSLOrdinaryField x) => false,
+            (CSLNameField x) => true,
+            (CSLDateField x) => false
+        ))
+        .chunkBy!((a,b) => a.key == b.key);
+
+    auto reduced = namesGroupedByType
+        .map!(n => n.chunkBy!(
+            (a,b) => a.tryGetMember!"np".family.split(" ")[0] ==
+                     b.tryGetMember!"np".family.split(" ")[0])
+            .map!(y => y.takeOne)
+        ).joiner.joiner;
+    // `reduced` now contains deduplicated names
+
+    auto noNames = rec.filter!(
+    visit!(
+        (CSLOrdinaryField x) => true,
+        (CSLNameField x) => false,
+        (CSLDateField x) => true
+    ));
+
+    return chain(noNames, reduced);
+   /+ 
+    // Strategy 1: if len(FAU) and len(AU) same, remove AU
+
+    // Count full authors
+    auto nFAU = rec.filter!(
+        v => v.visit!(
+            (CSLOrdinaryField x) => false,
+            (CSLNameField x) => x.full,
+            (CSLDateField x) => false
+        )).count;
+    // Count old-style authors
+    auto nAU = rec.filter!(
+        v => v.visit!(
+            (CSLOrdinaryField x) => false,
+            (CSLNameField x) => !x.full,
+            (CSLDateField x) => false
+        )).count;
+    stderr.writefln("Full authors: %d", nFAU);
+    stderr.writefln("Old-style authors: %d", nAU);
+
+    // If only one or the other record type appears, no worries, bail out
+    if (nFAU == 0 || nAU == 0)
+        return rec;
+
+    // remove non-full authors
+    if (nFAU == nAU)
+        return rec.filter!(
+            v => v.visit!(
+                (CSLOrdinaryField x) => true,
+                (CSLNameField x) => x.full,
+                (CSLDateField x) => true
+            )).array;
+
+    else if (nFAU > nAU)
+        stderr.writefln("WARNING: Can't handle Full:%d > Non-full:%d for type ", nFAU, nAU);
+
+    else if (nAU > nFAU)
+        stderr.writefln("WARNING: Can't handle Non-full:%d > Full:%d for type ", nAU, nFAU);
+
+    else
+        assert(0, "Unanticipated condition");
+
+    // Strategy 2: match on surname;
+    // prone to breakage if ther are participles like "van" "von" "de" etc.
+    // TODO
+
+    return rec;
++/
+}
+unittest
+{
+    string a = "author";
+    string e = "editor";
+
+    void check(CSLValue[] testData, size_t preLength, size_t postLength)
+    {
+        assert(testData.length == preLength);
+        auto res = testData.reduceAuthors.array;
+        writefln("res: %s", res);
+        assert(res.length == postLength);
+    }
+ 
+    CSLValue[] test0 = [
+        CSLValue( CSLNameField(a, "Blachly, James S") ),
+        CSLValue( CSLNameField(a, "Blachly JS") ),
+        CSLValue( CSLNameField(a, "Gregory, Charles T") ),
+        CSLValue( CSLNameField(a, "Gregory CT") )
+    ];
+
+    check(test0, 4, 2);
+
+    CSLValue[] test1 = [
+        CSLValue( CSLNameField(a, "Blachly, James S") ),
+        CSLValue( CSLNameField(a, "Blachly JS") ),
+        CSLValue( CSLNameField(a, "Gregory CT") ),
+        CSLValue( CSLNameField(a, "Kautto, Esko A") )
+    ];
+
+    check(test1, 4, 3);   
+
+    // Now test handling when we mix name types: author and editor
+    CSLValue[] test2 = [
+        CSLValue( CSLNameField(a, "Blachly, James S") ),
+        CSLValue( CSLNameField(a, "Blachly JS") ),
+        CSLValue( CSLNameField(a, "Gregory, Charles T") ),
+        CSLValue( CSLNameField(a, "Gregory CT") ),
+        CSLValue( CSLNameField(e, "Professor, Esteemed") )   // FED - 
+    ];
+   
+    check(test2, 5, 3); // result: 2 FAU, 1 FED 
 }
 
 /// Convert range of records (where each record is a range of tags)

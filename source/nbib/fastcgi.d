@@ -51,7 +51,8 @@ void handler(Cgi cgi) {
                     .array
                     .splitter("")
                     .map!mergeMultiLineItems
-                    .map!medlineToCSL;
+                    .map!medlineToCSL
+                    .map!reduceAuthors;
 
     auto ser = records.toAsdf;
     cgi.write(ser.app.result.to!string);
